@@ -3,8 +3,7 @@ import RoomPlan
 import Combine
 
 /// Bridges RoomPlan capture session lifecycle into SwiftUI.
-@MainActor
-final class RoomCaptureController: NSObject, ObservableObject {
+final class RoomCaptureController: NSObject, ObservableObject, RoomCaptureViewDelegate {
     enum Status: Equatable {
         case idle
         case capturing
@@ -30,14 +29,14 @@ final class RoomCaptureController: NSObject, ObservableObject {
         let config = RoomCaptureSession.Configuration()
         captureView.captureSession.run(configuration: config)
         isCaptureActive = true
-        status = .capturing
+        DispatchQueue.main.async { self.status = .capturing }
     }
 
     func stop() {
         guard isCaptureActive else { return }
         captureView.captureSession.stop()
         isCaptureActive = false
-        status = .processing
+        DispatchQueue.main.async { self.status = .processing }
     }
 
     func cancel() {
@@ -45,21 +44,22 @@ final class RoomCaptureController: NSObject, ObservableObject {
             captureView.captureSession.stop()
             isCaptureActive = false
         }
-        status = .cancelled
+        DispatchQueue.main.async { self.status = .cancelled }
     }
-}
 
-extension RoomCaptureController: RoomCaptureViewDelegate {
-    nonisolated func captureView(
-        didPresent processedResult: CapturedRoom,
-        error: (any Error)?
-    ) {
-        Task { @MainActor in
+    // MARK: - RoomCaptureViewDelegate
+
+    func captureView(shouldPresent roomDataForProcessing: CapturedRoomData, error: Error?) -> Bool {
+        true
+    }
+
+    func captureView(didPresent processedResult: CapturedRoom, error: Error?) {
+        DispatchQueue.main.async {
             if let error {
-                status = .failed(error.localizedDescription)
+                self.status = .failed(error.localizedDescription)
                 return
             }
-            status = .completed
+            self.status = .completed
             NotificationCenter.default.post(
                 name: .roomCaptureDidFinish,
                 object: nil,
