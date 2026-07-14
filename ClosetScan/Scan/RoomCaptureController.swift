@@ -3,7 +3,7 @@ import RoomPlan
 import Combine
 
 /// Bridges RoomPlan capture session lifecycle into SwiftUI.
-final class RoomCaptureController: NSObject, ObservableObject, RoomCaptureViewDelegate {
+final class RoomCaptureController: ObservableObject {
     enum Status: Equatable {
         case idle
         case capturing
@@ -17,26 +17,26 @@ final class RoomCaptureController: NSObject, ObservableObject, RoomCaptureViewDe
 
     let captureView: RoomCaptureView
     private var isCaptureActive = false
+    private let delegateBridge = RoomCaptureDelegateBridge()
 
-    override init() {
-        let view = RoomCaptureView(frame: .zero)
-        captureView = view
-        super.init()
-        view.delegate = self
+    init() {
+        captureView = RoomCaptureView(frame: .zero)
+        delegateBridge.owner = self
+        captureView.delegate = delegateBridge
     }
 
     func start() {
         let config = RoomCaptureSession.Configuration()
         captureView.captureSession.run(configuration: config)
         isCaptureActive = true
-        DispatchQueue.main.async { self.status = .capturing }
+        status = .capturing
     }
 
     func stop() {
         guard isCaptureActive else { return }
         captureView.captureSession.stop()
         isCaptureActive = false
-        DispatchQueue.main.async { self.status = .processing }
+        status = .processing
     }
 
     func cancel() {
@@ -44,27 +44,34 @@ final class RoomCaptureController: NSObject, ObservableObject, RoomCaptureViewDe
             captureView.captureSession.stop()
             isCaptureActive = false
         }
-        DispatchQueue.main.async { self.status = .cancelled }
+        status = .cancelled
     }
 
-    // MARK: - RoomCaptureViewDelegate
+    fileprivate func handlePresent(_ processedResult: CapturedRoom, error: Error?) {
+        if let error {
+            status = .failed(error.localizedDescription)
+            return
+        }
+        status = .completed
+        NotificationCenter.default.post(
+            name: .roomCaptureDidFinish,
+            object: nil,
+            userInfo: ["room": processedResult]
+        )
+    }
+}
+
+/// NSObject RoomPlan delegate kept separate so ObservableObject is not exposed to ObjC.
+private final class RoomCaptureDelegateBridge: NSObject, RoomCaptureViewDelegate {
+    weak var owner: RoomCaptureController?
 
     func captureView(shouldPresent roomDataForProcessing: CapturedRoomData, error: Error?) -> Bool {
         true
     }
 
     func captureView(didPresent processedResult: CapturedRoom, error: Error?) {
-        DispatchQueue.main.async {
-            if let error {
-                self.status = .failed(error.localizedDescription)
-                return
-            }
-            self.status = .completed
-            NotificationCenter.default.post(
-                name: .roomCaptureDidFinish,
-                object: nil,
-                userInfo: ["room": processedResult]
-            )
+        DispatchQueue.main.async { [weak self] in
+            self?.owner?.handlePresent(processedResult, error: error)
         }
     }
 }
