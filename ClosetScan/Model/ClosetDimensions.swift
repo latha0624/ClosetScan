@@ -38,8 +38,9 @@ struct ClosetDimensions: Equatable {
         var confidenceSum = 0
         var confidenceCount = 0
 
+        // RoomPlan exposes walls/floors/openings (no ceilings array). Height comes from wall extents.
         let surfaces: [CapturedRoom.Surface] =
-            room.walls + room.floors + room.ceilings + room.doors + room.windows + room.openings
+            room.walls + room.floors + room.doors + room.windows + room.openings
 
         for surface in surfaces {
             expandBounds(surface: surface, minP: &minP, maxP: &maxP, samples: &samples)

@@ -82,8 +82,12 @@ struct EmptyClosetViewer: UIViewRepresentable {
             for floor in room.floors {
                 root.addChild(boxEntity(for: floor.dimensions, transform: floor.transform, material: floorMaterial))
             }
-            for ceiling in room.ceilings {
-                root.addChild(boxEntity(for: ceiling.dimensions, transform: ceiling.transform, material: ceilingMaterial))
+            // RoomPlan has no ceilings array — add a thin lid from floor footprint at wall height.
+            if let floor = room.floors.first, let wall = room.walls.first {
+                var ceilingTransform = floor.transform
+                ceilingTransform.columns.3.y = wall.transform.columns.3.y + wall.dimensions.y * 0.5
+                let ceilingSize = SIMD3<Float>(floor.dimensions.x, 0.02, max(floor.dimensions.z, floor.dimensions.y))
+                root.addChild(boxEntity(for: ceilingSize, transform: ceilingTransform, material: ceilingMaterial))
             }
             for door in room.doors {
                 root.addChild(boxEntity(for: door.dimensions, transform: door.transform, material: openingMaterial))

@@ -4,7 +4,7 @@ import Combine
 
 /// Bridges RoomPlan capture session lifecycle into SwiftUI.
 @MainActor
-final class RoomCaptureController: ObservableObject {
+final class RoomCaptureController: NSObject, ObservableObject {
     enum Status: Equatable {
         case idle
         case capturing
@@ -19,9 +19,11 @@ final class RoomCaptureController: ObservableObject {
     let captureView: RoomCaptureView
     private var isCaptureActive = false
 
-    init() {
-        captureView = RoomCaptureView(frame: .zero)
-        captureView.delegate = self
+    override init() {
+        let view = RoomCaptureView(frame: .zero)
+        captureView = view
+        super.init()
+        view.delegate = self
     }
 
     func start() {
