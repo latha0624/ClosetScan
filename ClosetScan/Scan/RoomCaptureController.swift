@@ -61,9 +61,22 @@ final class RoomCaptureController: ObservableObject {
     }
 }
 
-/// NSObject RoomPlan delegate kept separate so ObservableObject is not exposed to ObjC.
-private final class RoomCaptureDelegateBridge: NSObject, RoomCaptureViewDelegate {
+/// Stable ObjC-visible RoomPlan delegate (RoomCaptureViewDelegate pulls in NSCoding).
+@objc(ClosetScanRoomCaptureDelegateBridge)
+final class RoomCaptureDelegateBridge: NSObject, RoomCaptureViewDelegate, NSSecureCoding {
+    static var supportsSecureCoding: Bool { true }
+
     weak var owner: RoomCaptureController?
+
+    override init() {
+        super.init()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init()
+    }
+
+    func encode(with coder: NSCoder) {}
 
     func captureView(shouldPresent roomDataForProcessing: CapturedRoomData, error: Error?) -> Bool {
         true
