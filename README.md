@@ -116,7 +116,9 @@ Digital removal is intentional omission: the RealityKit dollhouse builds meshes 
 
 - Push this repo to GitHub and share the link with **jimkliew** before your slot.
 - Email your time slot with subject: `AI & AR/VR Innovation Intern`
-- Slots: **Thu Jul 16, 2026** 10am–4pm ET · **Fri Jul 17, 2026** 9am–4pm ET (not 12–1pm)
+- **Confirmed slot:** **Tue Jul 21, 2026 · 9:00 AM EST**
+- Prep doc: [INTERVIEW_PREP.md](INTERVIEW_PREP.md)
+- Confirmation draft: [INTERVIEW_CONFIRMATION_DRAFT.md](INTERVIEW_CONFIRMATION_DRAFT.md)
 
 ## License
 
