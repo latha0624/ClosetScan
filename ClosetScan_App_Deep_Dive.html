@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ClosetScan — App Deep Dive for Interview</title>
+<style>
+  body { font-family: Georgia, "Times New Roman", serif; max-width: 820px; margin: 2rem auto; padding: 0 1.25rem 3rem; line-height: 1.45; color: #1a1a1a; background: #f7f5f1; }
+  h1 { font-size: 1.75rem; margin-bottom: 0.25rem; color: #143247; }
+  h2 { font-size: 1.15rem; margin-top: 1.6rem; color: #19465a; border-bottom: 1px solid #c9d5dc; padding-bottom: 0.2rem; }
+  .meta { color: #555; font-style: italic; margin-bottom: 1rem; }
+  .callout { background: #e8f1f5; border-left: 4px solid #2a7a8c; padding: 0.75rem 1rem; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; margin: 0.75rem 0; }
+  th, td { border: 1px solid #b7c4cc; padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; }
+  th { background: #e6f0f5; }
+  ul, ol { padding-left: 1.2rem; }
+  li { margin: 0.25rem 0; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
+  .qa dt { font-weight: 700; margin-top: 0.75rem; color: #19465a; }
+  .qa dd { margin: 0.2rem 0 0.5rem; }
+  @media print { body { background: white; margin: 0; max-width: none; } .noprint { display: none; } }
+</style>
+</head>
+<body>
+<p class="noprint callout"><strong>How to save as PDF:</strong> Open this file in Microsoft Edge → Ctrl+P → Printer: <em>Microsoft Print to PDF</em> → Save to <code>Desktop\internship\AR\ClosetScan\</code></p>
+<h1>ClosetScan — App Deep Dive for Interview</h1>
+<p class="meta">AI &amp; AR/VR Innovation Intern · Technical demo prep · Latha Prabhakar</p>
+<div class="callout">What to remember: live RoomPlan + LiDAR demo. Pitch the problem → scan → toggle empty shell → fractional inches → validate vs tape → explain architecture honestly.</div>
+
+<h2>1. Problem &amp; product story</h2>
+<p>Closets are hard to measure by eye, and photos alone do not give usable dimensions for shelving, organizers, or renovation planning. ClosetScan turns a LiDAR iPhone into a closet measuring tool that:</p>
+<ul>
+<li>Scans the physical closet with Apple RoomPlan (LiDAR + cameras).</li>
+<li>Digitally hides contents so reviewers see an empty architectural shell.</li>
+<li>Reports width, depth, and height to the nearest 1/16 inch.</li>
+<li>Lets you validate those numbers against a steel tape and keep a trial history.</li>
+</ul>
+<p><strong>Interview framing:</strong> second-round technical demonstration — not a production App Store product. Focus: reproducible demo, clear architecture, honest accuracy.</p>
+
+<h2>2. Tech stack (20 seconds)</h2>
+<table>
+<thead><tr><th>Layer</th><th>Choice</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>UI</td><td>SwiftUI</td><td>Fast screens; phase-driven navigation</td></tr>
+<tr><td>Scan</td><td>RoomPlan + ARKit</td><td>Parametric walls/objects from LiDAR</td></tr>
+<tr><td>Bridge</td><td>UIKit UIViewRepresentable</td><td>RoomCaptureView is UIKit</td></tr>
+<tr><td>3D</td><td>RealityKit (non-AR ARView)</td><td>Dollhouse of surfaces ± objects</td></tr>
+<tr><td>Math</td><td>simd + ClosetDimensions</td><td>AABB → inches → 1/16"</td></tr>
+<tr><td>Persist</td><td>UserDefaults / Codable</td><td>Validation trial history</td></tr>
+<tr><td>Device</td><td>iPhone 16 Pro</td><td>LiDAR required for RoomPlan</td></tr>
+<tr><td>Build</td><td>Xcode or GitHub Actions IPA</td><td>Sideloadly install (no Mac required)</td></tr>
+</tbody>
+</table>
+
+<h2>3. End-to-end user flow</h2>
+<p><code>Home → Scan (RoomCaptureView) → Results (3D + dimensions) → Validation (tape vs app)</code></p>
+<ul>
+<li><strong>Home:</strong> product pitch; LiDAR check via <code>supportsSceneReconstruction(.mesh)</code>.</li>
+<li><strong>Scan:</strong> RoomCaptureSession; Done → processing → CapturedRoom.</li>
+<li><strong>Results:</strong> RealityKit dollhouse; Show contents; fractional W/D/H.</li>
+<li><strong>Validation:</strong> tape inches → signed error → trial history → ≤1/16"?</li>
+</ul>
+
+<h2>4. File-by-file architecture</h2>
+<ul>
+<li><strong>ClosetScanApp.swift</strong> — App entry; AppModel as @StateObject.</li>
+<li><strong>ContentView / HomeView</strong> — Phase switcher + Scan Closet CTA.</li>
+<li><strong>AppModel.swift</strong> — phase, capturedRoom, dimensions, showContents, validationStore.</li>
+<li><strong>RoomCaptureController.swift</strong> — RoomCaptureView lifecycle + DelegateBridge.</li>
+<li><strong>ScanView.swift</strong> — UIViewRepresentable; Cancel/Done → handleScanComplete.</li>
+<li><strong>ClosetDimensions.swift</strong> — AABB → fractional inches.</li>
+<li><strong>EmptyClosetViewer.swift</strong> — RealityKit dollhouse; surfaces always; objects optional.</li>
+<li><strong>ResultsView.swift</strong> — 3D + toggle + dimensions + Validate.</li>
+<li><strong>ValidationView / ValidationStore</strong> — tape compare + UserDefaults history.</li>
+</ul>
+
+<h2>5. Scan pipeline</h2>
+<p>RoomPlan returns parametric <code>CapturedRoom</code>: surfaces (walls/floors/doors/windows/openings) + objects. No ceilings array — height from wall extents; viewer adds a thin ceiling lid.</p>
+<p><strong>Lifecycle:</strong> start → run → Done → stop → processing → <code>captureView(didPresent:)</code> → Notification → <code>handleScanComplete</code> → dimensions + results.</p>
+<p><strong>DelegateBridge:</strong> RoomCaptureViewDelegate needs NSCoding. Separate NSObject / NSSecureCoding bridge keeps ObservableObject clean and fixes CI — good engineering story.</p>
+
+<h2>6. Digital empty shell</h2>
+<p>Say: “Digital removal is intentional omission. Surfaces always; objects only when Show contents is on. No generative inpainting — reproducible under interview lighting.”</p>
+
+<h2>7. Dimension math</h2>
+<ol>
+<li>Collect surfaces: walls + floors + doors + windows + openings.</li>
+<li>8 local corners (±dimensions/2) → world via transform.</li>
+<li>Expand AABB min/max.</li>
+<li>Fallback: wall centers ± half dimensions.</li>
+<li>Y → height; larger horizontal → width; smaller → depth.</li>
+<li>meters × 39.37007874015748 → inches.</li>
+<li>Round fraction to nearest 1/16; reduce fraction.</li>
+<li>Report confidence + volume ft³.</li>
+</ol>
+
+<h2>8. Validation</h2>
+<p>Signed errors (app − tape). Target when max(|ΔW|,|ΔD|,|ΔH|) ≤ 0.0625". Persist trials in UserDefaults.</p>
+<p><strong>Honesty line:</strong> Display resolution is 1/16". LiDAR + RoomPlan is typically centimeter-class. Do not claim guaranteed ±1/16" sensor accuracy — measure, report, validate.</p>
+
+<h2>9. Device &amp; install</h2>
+<ul>
+<li>LiDAR required; iPhone 16 Pro OK; Simulator cannot capture.</li>
+<li>Camera + world sensing usage descriptions; arkit + metal.</li>
+<li>GitHub Actions IPA → Sideloadly (7-day re-sign).</li>
+</ul>
+
+<h2>10. Limitations</h2>
+<ul>
+<li>Non-LiDAR phones cannot capture.</li>
+<li>Narrow/cluttered closets may miss or merge walls.</li>
+<li>Clothes detection inconsistent; empty shell still shows structure.</li>
+<li>AABB can overestimate with openings.</li>
+<li>Width/depth normalized; synthesized ceiling approximate.</li>
+</ul>
+
+<h2>11. Strong Q&amp;A</h2>
+<dl class="qa">
+<dt>Walk me through the architecture.</dt>
+<dd>SwiftUI phase machine in AppModel. RoomCaptureView scan → RealityKit dollhouse → ClosetDimensions AABB → ValidationStore.</dd>
+<dt>How do you digitally empty the closet?</dt>
+<dd>Omission, not inpainting. Surfaces always; objects when toggle on.</dd>
+<dt>How do you get 1/16 inch?</dt>
+<dd>Meters→inches; round fractional part to nearest sixteenth; validation vs 0.0625".</dd>
+<dt>Is RoomPlan accurate enough?</dt>
+<dd>Centimeter-class. Fractional inches are reporting precision; prove with tape trials.</dd>
+<dt>What would you ship next?</dt>
+<dd>Opening-aware clear span, multi-scan fusion, USDZ export, better ceiling, MAE charts, optional ML clothing segmentation.</dd>
+<dt>Biggest engineering snag?</dt>
+<dd>No ceilings array; DelegateBridge / NSSecureCoding for CI.</dd>
+<dt>Why not raw ARKit mesh?</dt>
+<dd>Parametric surfaces give a cleaner empty-shell story and stabler demo dimensions.</dd>
+</dl>
+
+<h2>12. 20-minute script</h2>
+<ul>
+<li>0:00–0:30 — Home pitch</li>
+<li>0:30–3:30 — Live scan</li>
+<li>3:30–5:00 — Contents On → Off</li>
+<li>5:00–6:00 — Fractional W×D×H</li>
+<li>6:00–8:00 — Tape validation</li>
+<li>8:00–16:00 — Architecture / honesty / next steps</li>
+<li>16:00–20:00 — Q&amp;A</li>
+</ul>
+
+<h2>13. Closing line</h2>
+<p>“Thanks for the time — happy to walk through any part of the scan pipeline, the dimension math, or the validation results in more detail.”</p>
+</body>
+</html>
